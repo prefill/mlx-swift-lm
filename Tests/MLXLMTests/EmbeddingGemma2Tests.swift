@@ -1006,6 +1006,7 @@ extension EmbeddingGemma2Tests {
                 urls: [checkpoint.directory.appendingPathComponent("model.safetensors")],
                 namespaces: model.modelComponents[.audio]!.flatMap(\.namespaces),
                 perLayerQuantization: nil,
+                admission: nil,
                 prepare: { checkpoint in
                     gate.withLock { queue = String(cString: __dispatch_queue_get_label(nil)) }
                     return try model.prepareCheckpoint(checkpoint)

@@ -779,7 +779,9 @@ public final class LLMModelFactory: GenericModelFactory {
         if let configuredMessageGenerator = mutableConfiguration.messageGenerator {
             messageGenerator = configuredMessageGenerator
         } else if let model = model as? LLMModel {
-            messageGenerator = model.messageGenerator(tokenizer: tokenizer)
+            messageGenerator = try ModelLoading.perform {
+                model.messageGenerator(tokenizer: tokenizer)
+            }
         } else {
             messageGenerator = DefaultMessageGenerator()
         }

@@ -568,6 +568,9 @@ public func loadParoQuantModel<T: LanguageModel>(
     tokenizerLoader: any TokenizerLoader,
     toolCallFormat: ToolCallFormat? = nil
 ) async throws -> ModelContainer {
+    guard ModelLoading.admission == nil else {
+        throw ParoQuantError.loadAdmissionUnsupported
+    }
     // Phase wall-clock breakdown, logged once at the end. MLX ops are lazy, so
     // graph-building phases (convert/stack/remap) bill their kernel time to the
     // step-12 `eval(model)` — the phase split separates CPU-side work from that
@@ -835,6 +838,7 @@ public func loadParoQuantModel<T: LanguageModel>(
 // MARK: - Errors
 
 public enum ParoQuantError: LocalizedError {
+    case loadAdmissionUnsupported
     case missingConfig
     case unsupportedModel
     case missingTensor(String)
@@ -846,6 +850,8 @@ public enum ParoQuantError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
+        case .loadAdmissionUnsupported:
+            return "ParoQuant loading does not support a model load admission policy"
         case .missingConfig:
             return "Missing quantization_config in config.json for ParoQuant model"
         case .unsupportedModel:

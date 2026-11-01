@@ -41,14 +41,20 @@ public actor ModelTypeRegistry<T> {
     }
 
     /// Given a `modelType` and configuration data instantiate a new `LanguageModel`.
-    public func createModel(configuration: Data, modelType: String) throws -> sending T {
+    public func createModel(
+        configuration: Data, modelType: String,
+        admission: (any ModelLoadAdmission)? = ModelLoading.admission
+    ) throws -> sending T {
         guard let entries = creators[modelType] else {
             throw ModelFactoryError.unsupportedModelType(modelType)
         }
-        for entry in entries where entry.matches(configuration) {
-            return try entry.create(configuration)
+        let model = try ModelLoading.perform(admission: admission) {
+            for entry in entries where entry.matches(configuration) {
+                return SendableBox(try entry.create(configuration))
+            }
+            throw ModelFactoryError.unsupportedModelType(modelType)
         }
-        throw ModelFactoryError.unsupportedModelType(modelType)
+        return model.consume()
     }
 
     /// Whether a creator is registered for `modelType` — i.e. this registry can

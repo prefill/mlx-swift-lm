@@ -133,10 +133,13 @@ public class AnyOnDemandComponent: @unchecked Sendable {
             case .pending(let source):
                 // Callers need not be in a withError scope, on any thread.
                 let module = try withLoaderThreadError {
-                    let module = make()
-                    try applyCheckpoint(source.checkpoint(), to: module)
-                    eval(module)
-                    return module
+                    let module = try ModelLoading.perform(admission: source.admission) { make() }
+                    let checkpoint = try source.checkpoint()
+                    return try ModelLoading.perform(admission: source.admission) {
+                        try applyCheckpoint(source.prepare(checkpoint), to: module)
+                        eval(module)
+                        return module
+                    }
                 }
                 stateLock.withLock { state = .loaded(module) }
                 return module
@@ -149,6 +152,7 @@ public class AnyOnDemandComponent: @unchecked Sendable {
         let urls: [URL]
         let namespaces: [String]
         let perLayerQuantization: BaseConfiguration.PerLayerQuantization?
+        let admission: (any ModelLoadAdmission)?
         let prepare: (ModelCheckpoint) throws -> ModelCheckpoint
 
         func checkpoint() throws -> ModelCheckpoint {
@@ -157,7 +161,7 @@ public class AnyOnDemandComponent: @unchecked Sendable {
                 namespaces.contains { CheckpointNameMapping.relativeName(name, in: $0) != nil }
             }
             checkpoint.perLayerQuantization = perLayerQuantization
-            return try prepare(checkpoint)
+            return checkpoint
         }
     }
 }
@@ -227,7 +231,8 @@ func loadOnDemandComponents(_ components: [AnyOnDemandComponent]) async throws {
 /// Returns the serialized namespaces the load must not read.
 func prepareComponents(
     of model: BaseLanguageModel, urls: [URL], excluded: Set<ModelComponent>,
-    loading: ComponentLoading, perLayerQuantization: BaseConfiguration.PerLayerQuantization?
+    loading: ComponentLoading, perLayerQuantization: BaseConfiguration.PerLayerQuantization?,
+    admission: (any ModelLoadAdmission)? = nil
 ) throws -> [String] {
     guard let model = model as? any ModelComponentsProviding else { return [] }
     let onDemand = Dictionary(
@@ -245,6 +250,7 @@ func prepareComponents(
                 ? .init(
                     urls: urls, namespaces: parts.flatMap(\.namespaces),
                     perLayerQuantization: perLayerQuantization,
+                    admission: admission,
                     prepare: { [weak model] checkpoint in
                         guard let model else { throw OnDemandComponentError.unavailable(component) }
                         return try model.prepareCheckpoint(checkpoint)

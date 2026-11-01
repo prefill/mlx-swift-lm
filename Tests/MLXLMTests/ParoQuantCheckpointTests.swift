@@ -9,6 +9,20 @@ import Testing
 @testable import MLXLMCommon
 
 struct ParoQuantCheckpointTests {
+    @Test
+    func admissionPolicyFailsBeforeReadingTheCheckpoint() async throws {
+        do {
+            _ = try await ModelLoading.$admission.withValue(RejectingModelLoadAdmission()) {
+                try await loadParoQuantModel(
+                    from: URL(fileURLWithPath: "/unused-admission-test"),
+                    typeRegistry: ModelTypeRegistry<CheckpointModel>(),
+                    tokenizerLoader: TestTokenizerLoader())
+            }
+            Issue.record("ParoQuant accepted an unsupported admission policy")
+        } catch ParoQuantError.loadAdmissionUnsupported {
+        }
+    }
+
     @Test(arguments: [false, true])
     func checkpointPreparationPreservesPrecision(prepared: Bool) async throws {
         let directory = try makeCheckpoint(prepared: prepared)

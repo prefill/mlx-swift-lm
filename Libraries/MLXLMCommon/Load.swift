@@ -404,7 +404,25 @@ public func loadWeights(
     excludedComponents: Set<ModelComponent> = [],
     componentLoading: ComponentLoading = .onFirstUse
 ) throws {
-    let additionalFiles = (model as? any AdditionalWeightFilesProviding)?.additionalWeightFiles
+    try loadWeights(
+        modelDirectory: modelDirectory, model: model,
+        quantization: quantization, perLayerQuantization: perLayerQuantization,
+        weightFileSelection: weightFileSelection, excludedComponents: excludedComponents,
+        componentLoading: componentLoading, admission: ModelLoading.admission)
+}
+
+private func loadWeights(
+    modelDirectory: URL, model: BaseLanguageModel,
+    quantization: BaseConfiguration.Quantization?,
+    perLayerQuantization: BaseConfiguration.PerLayerQuantization?,
+    weightFileSelection: WeightFileSelection,
+    excludedComponents: Set<ModelComponent>,
+    componentLoading: ComponentLoading,
+    admission: (any ModelLoadAdmission)?
+) throws {
+    let additionalFiles = try ModelLoading.perform(admission: admission) {
+        (model as? any AdditionalWeightFilesProviding)?.additionalWeightFiles
+    }
     let weightURLs = try safetensorWeightURLs(
         in: modelDirectory,
         selection: weightFileSelection,
@@ -412,20 +430,22 @@ public func loadWeights(
     let perLayerQuantization =
         perLayerQuantization
         ?? quantization.map { .init(quantization: $0, perLayerQuantization: [:]) }
-    let excludedNamespaces =
+    let excludedNamespaces = try ModelLoading.perform(admission: admission) {
         try prepareComponents(
             of: model, urls: weightURLs, excluded: excludedComponents,
-            loading: componentLoading, perLayerQuantization: perLayerQuantization)
-        + model.excludedCheckpointNamespaces
+            loading: componentLoading, perLayerQuantization: perLayerQuantization,
+            admission: admission)
+            + model.excludedCheckpointNamespaces
+    }
     var checkpoint = try loadModelCheckpoint(
         urls: weightURLs, excludedNamespaces: excludedNamespaces)
     checkpoint.perLayerQuantization = perLayerQuantization
-    checkpoint = try model.prepareCheckpoint(checkpoint)
-    try applyCheckpoint(checkpoint, to: model)
+    try ModelLoading.perform(admission: admission) {
+        checkpoint = try model.prepareCheckpoint(checkpoint)
+        try applyCheckpoint(checkpoint, to: model)
 
-    // Build derived inference-only state and realize the model while the loader
-    // still has exclusive access. Forward passes must remain read-only.
-    materializeModelForInference(model)
+        materializeModelForInference(model)
+    }
 }
 
 /// Quantize the layers `checkpoint` has scales for, then update `module` with strict validation.
@@ -455,6 +475,7 @@ public func loadWeights(
     excludedComponents: Set<ModelComponent> = [],
     componentLoading: ComponentLoading = .onFirstUse
 ) async throws {
+    let admission = ModelLoading.admission
     let model = SendableBox(model)
     try await withCheckedThrowingContinuation {
         (continuation: CheckedContinuation<Void, any Error>) in
@@ -469,7 +490,8 @@ public func loadWeights(
                             perLayerQuantization: perLayerQuantization,
                             weightFileSelection: weightFileSelection,
                             excludedComponents: excludedComponents,
-                            componentLoading: componentLoading)
+                            componentLoading: componentLoading,
+                            admission: admission)
                     }
                 })
         }

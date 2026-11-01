@@ -1,5 +1,7 @@
 # MLX Swift LM
 
+This is the `prefill/mlx-swift-lm` fork. It adds optional, caller-owned admission checks at model-loading stages that can submit GPU work. Applications can use the checks to reject work after a load is retired. See [why this fork exists and what the policy covers](FORK.md).
+
 MLX Swift LM is a Swift package to build tools and applications with large language models (LLMs) and vision language models (VLMs) in [MLX Swift](https://github.com/ml-explore/mlx-swift).
 
 > [!IMPORTANT]
